@@ -26,13 +26,13 @@ intents.guilds = True
 MODELS = {
     "sdxl": {
         "name": "stability-ai/sdxl",
-        "version": "392573f9ac8c7f6153001c5ef00fc9fd6611ad361e3ead07160116747895d7ad",
+        "version": "7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc",
         "requires_prompt": True
     },
     "realvisxl": {
         "name": "adirik/realvisxl-v3.0-turbo",
         "version": "3dc73c805b11b4b01a60555e532fd3ab3f0e60d26f6584d9b8ba7e1b95858243",
-        "requires_prompt": False
+        "requires_prompt": True
     },
     "sd": {
         "name": "stability-ai/stable-diffusion",
