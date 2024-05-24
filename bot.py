@@ -36,7 +36,7 @@ MODELS = {
     "realvisxl": {
         "name": "adirik/realvisxl-v3.0-turbo",
         "version": "3dc73c805b11b4b01a60555e532fd3ab3f0e60d26f6584d9b8ba7e1b95858243",
-        "requires_prompt": True
+        "requires_prompt": False
     },
     "sd": {
         "name": "stability-ai/stable-diffusion",
@@ -88,20 +88,21 @@ def has_image_generator_role():
 
 async def perform_image_generation(interaction: Interaction, model: str, prompt: str = None, width: int = 768, height: int = 768, num_steps: int = 25, seed: int = None):
     print(f"Starting image generation for model: {model}")
+    
     if not REPLICATE_API_TOKEN:
         print("Missing Replicate API token.")
-        await interaction.followup.send("Please have an admin add a Replicate API key using the /settings command.")
+        await interaction.followup.send("Please have an admin add a Replicate API key using the /settings command.", ephemeral=True)
         return
 
     model_data = MODELS.get(model.lower())
     if not model_data:
         print(f"Invalid model selected: {model}")
-        await interaction.followup.send("Invalid model selected.")
+        await interaction.followup.send("Invalid model selected.", ephemeral=True)
         return
 
     if model_data["requires_prompt"] and not prompt:
         print(f"Missing prompt for model: {model}")
-        await interaction.followup.send(f"Please provide a prompt for {model}.")
+        await interaction.followup.send(f"Please provide a prompt for {model}.", ephemeral=True)
         return
 
     if seed is None:
@@ -158,10 +159,11 @@ async def perform_image_generation(interaction: Interaction, model: str, prompt:
             await interaction.followup.send(embed=embed, view=view)
         else:
             print("Failed to download generated image.")
-            await interaction.followup.send(f"Error: Failed to download generated image.")
+            await interaction.followup.send(f"Error: Failed to download generated image.", ephemeral=True)
     except Exception as e:
         print(f"Error generating image: {e}")
-        await interaction.followup.send(f"Error generating image: {e}")
+        await interaction.followup.send(f"Error generating image: {e}", ephemeral=True)
+
 
 
 class ModelSelect(discord.ui.Select):
