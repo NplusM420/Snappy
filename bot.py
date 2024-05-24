@@ -88,14 +88,17 @@ def has_image_generator_role():
 
 async def perform_image_generation(interaction: Interaction, model: str, prompt: str = None, width: int = 768, height: int = 768, num_steps: int = 25, seed: int = None):
     if not REPLICATE_API_TOKEN:
-        return await interaction.followup.send("Please have an admin add a Replicate API key using the /settings command.")
-    
+        await interaction.followup.send("Please have an admin add a Replicate API key using the /settings command.")
+        return
+
     model_data = MODELS.get(model.lower())
     if not model_data:
-        return await interaction.followup.send("Invalid model selected.")
+        await interaction.followup.send("Invalid model selected.")
+        return
 
     if model_data["requires_prompt"] and not prompt:
-        return await interaction.followup.send(f"Please provide a prompt for {model}.")
+        await interaction.followup.send(f"Please provide a prompt for {model}.")
+        return
 
     if seed is None:
         seed = random.randint(0, 4294967295)
@@ -150,6 +153,8 @@ async def perform_image_generation(interaction: Interaction, model: str, prompt:
             await interaction.followup.send(f"Error: Failed to download generated image.")
     except Exception as e:
         await interaction.followup.send(f"Error generating image: {e}")
+        print(f"Error generating image: {e}")
+
 
 class ModelSelect(discord.ui.Select):
     def __init__(self, data):
