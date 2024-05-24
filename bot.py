@@ -87,16 +87,20 @@ def has_image_generator_role():
     return app_commands.check(predicate)
 
 async def perform_image_generation(interaction: Interaction, model: str, prompt: str = None, width: int = 768, height: int = 768, num_steps: int = 25, seed: int = None):
+    print(f"Starting image generation for model: {model}")
     if not REPLICATE_API_TOKEN:
+        print("Missing Replicate API token.")
         await interaction.followup.send("Please have an admin add a Replicate API key using the /settings command.")
         return
 
     model_data = MODELS.get(model.lower())
     if not model_data:
+        print(f"Invalid model selected: {model}")
         await interaction.followup.send("Invalid model selected.")
         return
 
     if model_data["requires_prompt"] and not prompt:
+        print(f"Missing prompt for model: {model}")
         await interaction.followup.send(f"Please provide a prompt for {model}.")
         return
 
@@ -123,11 +127,14 @@ async def perform_image_generation(interaction: Interaction, model: str, prompt:
         input_data["negative_prompt"] = "(worst quality, low quality, illustration, 3d, 2d, painting, cartoons, sketch), open mouth"
         input_data["prompt_strength"] = 0.8
 
+    print(f"Input data for {model}: {input_data}")
     model_to_run = f"{model_data['name']}:{model_data['version']}"
+    print(f"Model to run: {model_to_run}")
 
     try:
         await interaction.response.defer()
         output = await asyncio.to_thread(replicate.run, model_to_run, input=input_data)
+        print(f"Output from replicate: {output}")
         image_url = output[0]
         image_file = await fetch_media(image_url)
 
@@ -150,10 +157,11 @@ async def perform_image_generation(interaction: Interaction, model: str, prompt:
 
             await interaction.followup.send(embed=embed, view=view)
         else:
+            print("Failed to download generated image.")
             await interaction.followup.send(f"Error: Failed to download generated image.")
     except Exception as e:
-        await interaction.followup.send(f"Error generating image: {e}")
         print(f"Error generating image: {e}")
+        await interaction.followup.send(f"Error generating image: {e}")
 
 
 class ModelSelect(discord.ui.Select):
