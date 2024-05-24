@@ -36,7 +36,7 @@ MODELS = {
     "realvisxl": {
         "name": "adirik/realvisxl-v3.0-turbo",
         "version": "3dc73c805b11b4b01a60555e532fd3ab3f0e60d26f6584d9b8ba7e1b95858243",
-        "requires_prompt": False
+        "requires_prompt": True
     },
     "sd": {
         "name": "stability-ai/stable-diffusion",
@@ -88,7 +88,7 @@ def has_image_generator_role():
 
 async def perform_image_generation(interaction: Interaction, model: str, prompt: str = None, width: int = 768, height: int = 768, num_steps: int = 25, seed: int = None):
     print(f"Starting image generation for model: {model}")
-    
+
     if not REPLICATE_API_TOKEN:
         print("Missing Replicate API token.")
         await interaction.followup.send("Please have an admin add a Replicate API key using the /settings command.", ephemeral=True)
@@ -164,6 +164,19 @@ async def perform_image_generation(interaction: Interaction, model: str, prompt:
         print(f"Error generating image: {e}")
         await interaction.followup.send(f"Error generating image: {e}", ephemeral=True)
 
+async def fetch_media(url: str):
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    content_type = resp.headers.get('content-type')
+                    filename = "output.png" if 'image' in content_type else "output.mp4" if 'video' in content_type else "output"
+                    return File(BytesIO(await resp.read()), filename=filename)
+                else:
+                    raise Exception(f"Failed to download content: {resp.status}")
+    except Exception as e:
+        print(f"Error fetching content from {url}: {e}")
+        return None
 
 
 class ModelSelect(discord.ui.Select):
@@ -178,7 +191,9 @@ class ModelSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         selected_model = self.values[0].lower()
+        print(f"Selected model: {selected_model}")
         await perform_image_generation(interaction, selected_model, self.data['prompt'], self.data['width'], self.data['height'], num_steps=self.data['steps'], seed=self.data['seed'])
+
 
 @bot.tree.command(name="image", description="Generate an image")
 @has_image_generator_role()
