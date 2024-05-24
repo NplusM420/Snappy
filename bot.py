@@ -183,16 +183,17 @@ class ModelSelect(discord.ui.Select):
     def __init__(self, data):
         self.data = data
         options = [
-            discord.SelectOption(label="SD", description="Stable Diffusion"),
-            discord.SelectOption(label="SDXL", description="Stable Diffusion XL"),
-            discord.SelectOption(label="RealVis", description="RealVis XL")
+            discord.SelectOption(label="SD", description="Stable Diffusion", value="sd"),
+            discord.SelectOption(label="SDXL", description="Stable Diffusion XL", value="sdxl"),
+            discord.SelectOption(label="RealVisXL", description="RealVis XL", value="realvisxl")
         ]
         super().__init__(placeholder="Choose a model...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        selected_model = self.values[0].lower()
+        selected_model = self.values[0]
         print(f"Selected model: {selected_model}")
         await perform_image_generation(interaction, selected_model, self.data['prompt'], self.data['width'], self.data['height'], num_steps=self.data['steps'], seed=self.data['seed'])
+
 
 
 @bot.tree.command(name="image", description="Generate an image")
