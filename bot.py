@@ -1,7 +1,3 @@
-from keep_alive import keep_alive
-
-keep_alive()
-
 import os
 import discord
 import replicate
@@ -12,7 +8,9 @@ import aiohttp
 import traceback
 import random
 from discord import app_commands, Interaction, File, Embed, Colour, ButtonStyle, SelectOption
+from keep_alive import keep_alive
 
+# Load environment variables
 load_dotenv()
 
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -88,7 +86,7 @@ def has_image_generator_role():
 
 async def perform_image_generation(interaction: Interaction, model: str, prompt: str = None, width: int = 768, height: int = 768, num_steps: int = 25, seed: int = None):
     print(f"Starting image generation for model: {model}")
-
+    
     if not REPLICATE_API_TOKEN:
         print("Missing Replicate API token.")
         await interaction.followup.send("Please have an admin add a Replicate API key using the /settings command.", ephemeral=True)
@@ -160,24 +158,20 @@ async def perform_image_generation(interaction: Interaction, model: str, prompt:
         else:
             print("Failed to download generated image.")
             await interaction.followup.send(f"Error: Failed to download generated image.", ephemeral=True)
+    except discord.errors.NotFound as e:
+        print(f"Error generating image: Unknown interaction: {e}")
+        await interaction.followup.send("Error: Unknown interaction. Please try again.", ephemeral=True)
+    except discord.errors.HTTPException as e:
+        print(f"Error generating image: HTTP exception: {e}")
+        if e.status == 429:
+            await asyncio.sleep(5)  # Wait and retry on rate limit
+            try:
+                await interaction.followup.send("Error generating image: Rate limit exceeded. Please try again.", ephemeral=True)
+            except Exception as e:
+                print(f"Error sending follow-up message after rate limit: {e}")
     except Exception as e:
         print(f"Error generating image: {e}")
         await interaction.followup.send(f"Error generating image: {e}", ephemeral=True)
-
-async def fetch_media(url: str):
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    content_type = resp.headers.get('content-type')
-                    filename = "output.png" if 'image' in content_type else "output.mp4" if 'video' in content_type else "output"
-                    return File(BytesIO(await resp.read()), filename=filename)
-                else:
-                    raise Exception(f"Failed to download content: {resp.status}")
-    except Exception as e:
-        print(f"Error fetching content from {url}: {e}")
-        return None
-
 
 class ModelSelect(discord.ui.Select):
     def __init__(self, data):
@@ -193,8 +187,6 @@ class ModelSelect(discord.ui.Select):
         selected_model = self.values[0]
         print(f"Selected model: {selected_model}")
         await perform_image_generation(interaction, selected_model, self.data['prompt'], self.data['width'], self.data['height'], num_steps=self.data['steps'], seed=self.data['seed'])
-
-
 
 @bot.tree.command(name="image", description="Generate an image")
 @has_image_generator_role()
@@ -220,44 +212,58 @@ async def image_command(interaction: Interaction, prompt: str, width: int = 768,
 
 @bot.event
 async def on_interaction(interaction: discord.Interaction):
-    if interaction.type == discord.InteractionType.component:
-        custom_id = interaction.data['custom_id']
+    try:
+        if interaction.type == discord.InteractionType.component:
+            custom_id = interaction.data['custom_id']
+            print(f"Custom ID: {custom_id}")
 
-        if custom_id == "upscale":
-            await interaction.response.send_message("Please wait one moment while I upscale the image...")
-            original_message = interaction.message
-            content_url = original_message.embeds[0].image.url if original_message.embeds else None
-            await perform_upscale(interaction, image_url=content_url, prompt="Upscale to 4k")
+            if custom_id == "upscale":
+                await interaction.response.defer()
+                await interaction.followup.send("Please wait one moment while I upscale the image...")
+                original_message = interaction.message
+                content_url = original_message.embeds[0].image.url if original_message.embeds else None
+                await perform_upscale(interaction, image_url=content_url, prompt="Upscale to 4k")
 
-        elif custom_id == "enhance":
-            await interaction.response.send_message("Please wait one moment while I enhance the image...")
-            original_message = interaction.message
-            content_url = original_message.embeds[0].image.url if original_message.embeds else None
-            await perform_enhance(interaction, image_url=content_url, fidelity=0.5)
+            elif custom_id == "enhance":
+                await interaction.response.defer()
+                await interaction.followup.send("Please wait one moment while I enhance the image...")
+                original_message = interaction.message
+                content_url = original_message.embeds[0].image.url if original_message.embeds else None
+                await perform_enhance(interaction, image_url=content_url, fidelity=0.5)
 
-        elif custom_id == "removebg":
-            await interaction.response.send_message("Please wait one moment while I remove the background...")
-            original_message = interaction.message
-            content_url = original_message.embeds[0].image.url if original_message.embeds else None
-            await perform_removebg(interaction, image_url=content_url)
+            elif custom_id == "removebg":
+                await interaction.response.defer()
+                await interaction.followup.send("Please wait one moment while I remove the background...")
+                original_message = interaction.message
+                content_url = original_message.embeds[0].image.url if original_message.embeds else None
+                await perform_removebg(interaction, image_url=content_url)
 
-        elif custom_id == "img2vid":
-            await interaction.response.send_message("Please wait one moment while I create the video...")
-            original_message = interaction.message
-            content_url = original_message.embeds[0].image.url if original_message.embeds else None
+            elif custom_id == "img2vid":
+                await interaction.response.defer()
+                await interaction.followup.send("Please wait one moment while I create the video...")
+                original_message = interaction.message
+                content_url = original_message.embeds[0].image.url if original_message.embeds else None
 
-            try:
-                width = original_message.width
-                height = original_message.height
-                num_steps = original_message.num_steps
-                seed = original_message.seed
-            except AttributeError:
-                width = 768
-                height = 768
-                num_steps = 25
-                seed = None
+                try:
+                    width = original_message.width
+                    height = original_message.height
+                    num_steps = original_message.num_steps
+                    seed = original_message.seed
+                except AttributeError:
+                    width = 768
+                    height = 768
+                    num_steps = 25
+                    seed = None
 
-            await perform_i2vgen(interaction, image_url=content_url, prompt="make this into a video", width=width, height=height, num_steps=num_steps, seed=seed)
+                await perform_i2vgen(interaction, image_url=content_url, prompt="make this into a video", width=width, height=height, num_steps=num_steps, seed=seed)
+    except discord.errors.NotFound as e:
+        print(f"Error in on_interaction: Unknown interaction: {e}")
+    except discord.errors.HTTPException as e:
+        print(f"Error in on_interaction: HTTP exception: {e}")
+        if e.status == 429:
+            await asyncio.sleep(5)  # Wait and retry on rate limit
+    except Exception as e:
+        print(f"Error in on_interaction: {e}")
 
 async def perform_i2vgen(interaction: Interaction, image_url: str, prompt: str, width: int, height: int, num_steps: int, seed: int):
     if seed is None:
@@ -285,9 +291,10 @@ async def perform_i2vgen(interaction: Interaction, image_url: str, prompt: str, 
             embed.description = f"[Click here to view the video]({video_url})"
             await interaction.followup.send(embed=embed, file=video_file)
         else:
-            await interaction.followup.send(f"Error: Failed to download generated video.")
+            await interaction.followup.send(f"Error: Failed to download generated video.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"Error generating video: {e}")
+        print(f"Error generating video: {e}")
+        await interaction.followup.send(f"Error generating video: {e}", ephemeral=True)
 
 async def perform_enhance(interaction: Interaction, image_url: str, fidelity: float):
     input_data = {
@@ -314,9 +321,10 @@ async def perform_enhance(interaction: Interaction, image_url: str, fidelity: fl
             sent_message.image_url = image_url
             sent_message.fidelity = fidelity
         else:
-            await interaction.followup.send(f"Error: Failed to download generated image.")
+            await interaction.followup.send(f"Error: Failed to download generated image.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"Error enhancing image: {e}")
+        print(f"Error enhancing image: {e}")
+        await interaction.followup.send(f"Error enhancing image: {e}", ephemeral=True)
 
 async def perform_upscale(interaction: Interaction, image_url: str, prompt: str):
     input_data = {
@@ -344,9 +352,10 @@ async def perform_upscale(interaction: Interaction, image_url: str, prompt: str)
             sent_message.image_url = image_url
             sent_message.prompt = prompt
         else:
-            await interaction.followup.send(f"Error: Failed to download generated image.")
+            await interaction.followup.send(f"Error: Failed to download generated image.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"Error upscaling image: {e}")
+        print(f"Error upscaling image: {e}")
+        await interaction.followup.send(f"Error upscaling image: {e}", ephemeral=True)
 
 async def perform_removebg(interaction: Interaction, image_url: str):
     input_data = {
@@ -371,54 +380,10 @@ async def perform_removebg(interaction: Interaction, image_url: str):
 
             sent_message.image_url = image_url
         else:
-            await interaction.followup.send(f"Error: Failed to download generated image.")
+            await interaction.followup.send(f"Error: Failed to download generated image.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"Error removing background: {e}")
-
-@bot.tree.command(name="i2vgen", description="Generate a video based on an input image and a prompt")
-@has_image_generator_role()
-@app_commands.guild_only()
-@app_commands.describe(
-    image_url="URL of the input image",
-    prompt="Describe the video you want to generate",
-    width="Width of the video in pixels",
-    height="Height of the video in pixels",
-    num_steps="Number of inference steps (higher is slower but potentially better quality)",
-    seed="Seed value for reproducibility (leave empty for random seed)"
-)
-async def i2vgen(interaction: Interaction, image_url: str, prompt: str, width: int = 1024, height: int = 1024, num_steps: int = 25, seed: int = None):
-    await interaction.response.defer()
-    await perform_i2vgen(interaction, image_url, prompt, width, height, num_steps, seed)
-
-@bot.tree.command(name="enhance", description="Enhance an image using CodeFormer")
-@has_image_generator_role()
-@app_commands.guild_only()
-@app_commands.describe(
-    image_url="URL of the image to enhance",
-    fidelity="Fidelity of the enhancement (0.1 - 0.9, higher is stronger)"
-)
-async def enhance(interaction: Interaction, image_url: str, fidelity: float = 0.1):
-    await interaction.response.defer()
-    await perform_enhance(interaction, image_url, fidelity)
-
-@bot.tree.command(name="upscale", description="Upscale an image using Magic Image Refiner")
-@has_image_generator_role()
-@app_commands.guild_only()
-@app_commands.describe(
-    image_url="URL of the image to upscale",
-    prompt="Describe how you want to upscale the image"
-)
-async def upscale(interaction: Interaction, image_url: str, prompt: str):
-    await interaction.response.defer()
-    await perform_upscale(interaction, image_url, prompt)
-
-@bot.tree.command(name="removebg", description="Remove the background of an image")
-@has_image_generator_role()
-@app_commands.guild_only()
-@app_commands.describe(image_url="URL of the image")
-async def removebg(interaction: Interaction, image_url: str):
-    await interaction.response.defer()
-    await perform_removebg(interaction, image_url)
+        print(f"Error removing background: {e}")
+        await interaction.followup.send(f"Error removing background: {e}", ephemeral=True)
 
 @bot.tree.command(name="settings", description="Update the bot settings")
 @app_commands.guild_only()
@@ -452,6 +417,7 @@ async def settings_command(interaction: Interaction, api_key: str = None, requir
 
 def update_replicate_api_token(api_key: str):
     global REPLICATE_API_TOKEN
+    REPLICATE_API_TOKEN = api_key
     with open('.env', 'r') as file:
         lines = file.readlines()
     with open('.env', 'w') as file:
@@ -460,12 +426,12 @@ def update_replicate_api_token(api_key: str):
                 file.write(f'REPLICATE_API_TOKEN={api_key}\n')
             else:
                 file.write(line)
-    load_dotenv(override=True)
-    REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
-    replicate.Client(api_token=REPLICATE_API_TOKEN)
+        if not any(line.startswith('REPLICATE_API_TOKEN=') for line in lines):
+            file.write(f'REPLICATE_API_TOKEN={api_key}\n')
 
 def update_required_role(required_role: str):
     global REQUIRED_ROLE
+    REQUIRED_ROLE = required_role
     with open('.env', 'r') as file:
         lines = file.readlines()
     with open('.env', 'w') as file:
@@ -474,8 +440,8 @@ def update_required_role(required_role: str):
                 file.write(f'REQUIRED_ROLE={required_role}\n')
             else:
                 file.write(line)
-    load_dotenv(override=True)
-    REQUIRED_ROLE = required_role
+        if not any(line.startswith('REQUIRED_ROLE=') for line in lines):
+            file.write(f'REQUIRED_ROLE={required_role}\n')
 
 def remove_required_role(remove_role: str):
     global REQUIRED_ROLE
@@ -490,74 +456,5 @@ def remove_required_role(remove_role: str):
     load_dotenv(override=True)
     REQUIRED_ROLE = os.getenv("REQUIRED_ROLE", "ImageGenerator")
 
-@bot.tree.command(name="help", description="Shows help information for using the image generation commands")
-async def help_command(interaction: Interaction):
-    embed = Embed(
-        title="Help - Image Generation",
-        description="Learn how to use the image generation commands!",
-        color=Colour.green()
-    )
-    embed.add_field(
-        name="/image",
-        value="Generates an image using the selected model.\n"
-              "**Parameters:**\n"
-              "`prompt`: Description of the image to generate.\n"
-              "`width`: Width of the image (default: 768).\n"
-              "`height`: Height of the image (default: 768).\n"
-              "`steps`: Number of inference steps (default: 25).\n"
-              "`seed`: Seed for reproducibility (optional).\n"
-              "**Example:** /image prompt: 'A beautiful sunset', width: 1024, height: 768, steps: 50",
-        inline=False
-    )
-    embed.add_field(
-        name="/i2vgen",
-        value="Generates a video based on an input image and a prompt.\n"
-              "**Parameters:**\n"
-              "`image_url`: URL of the input image.\n"
-              "`prompt`: Description of the desired video.\n"
-              "`width`, `height`: Dimensions of the video (default: 1024).\n"
-              "`num_steps`: Number of inference steps (default: 25).\n"
-              "`seed`: Seed for reproducibility (optional).\n"
-              "**Example:** /i2vgen image_url: 'http://example.com/image.png', prompt: 'Turn this into a cinematic video'",
-        inline=False
-    )
-    embed.add_field(
-        name="/enhance",
-        value="Enhances an image using CodeFormer.\n"
-              "**Parameters:**\n"
-              "`image_url`: URL of the image to enhance.\n"
-              "`fidelity`: Strength of enhancement (0.1-0.9, default: 0.5).\n"
-              "**Example:** /enhance image_url: 'http://example.com/image.png', fidelity: 0.7",
-        inline=False
-    )
-    embed.add_field(
-        name="/upscale",
-        value="Upscales an image using Magic Image Refiner.\n"
-              "**Parameters:**\n"
-              "`image_url`: URL of the image to upscale.\n"
-              "`prompt`: Description of the desired upscaling.\n"
-              "**Example:** /upscale image_url: 'http://example.com/image.png', prompt: 'Upscale to 4k'",
-        inline=False
-    )
-    embed.add_field(
-        name="/removebg",
-        value="Removes the background from an image.\n"
-              "**Parameters:**\n"
-              "`image_url`: URL of the image.\n"
-              "**Example:** /removebg image_url: 'http://example.com/image.png'",
-        inline=False
-    )
-    embed.add_field(
-        name="/settings",
-        value="Updates the bot settings (admin only).\n"
-              "**Parameters:**\n"
-              "`api_key`: Your new Replicate API key.\n"
-              "`required_role`: The new role required to use image generation commands.\n"
-              "`remove_role`: The role to remove from the required roles.\n"
-              "**Example:** /settings api_key: 'new-api-key', required_role: 'NewRole', remove_role: 'OldRole'",
-        inline=False
-    )
-
-    await interaction.response.send_message(embed=embed)
-
+keep_alive()
 bot.run(DISCORD_BOT_TOKEN)
